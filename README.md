@@ -23,6 +23,7 @@ All tools are designed for long‑running, resumable scans with batching, progre
 - [CLI options & prompts](#cli-options--prompts)
 - [Performance tips](#performance-tips)
 - [Safety & legal](#safety--legal)
+- [License](#license)
 
 ---
 
@@ -243,4 +244,5 @@ These tools are intended for **authorized security testing and network inventory
 
 ## License
 
-Add your preferred license here (e.g., MIT, Apache 2.0) and include a `LICENSE` file in the repository.
+This project is licensed under the **GNU General Public License (GPL)**.  
+See the `LICENSE` file for the full license text.
