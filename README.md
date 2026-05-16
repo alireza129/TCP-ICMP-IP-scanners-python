@@ -51,8 +51,8 @@ All tools are designed for long‑running, resumable scans with batching, progre
 ### General clone & run
 
 ```bash
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/alireza129/TCP-ICMP-CIDR-IP-scanners-python.git
+cd TCP-ICMP-CIDR-IP-scanners-python
 
 # Make scripts executable (optional on Unix)
 chmod +x CIDR_Scanner.py ICMP_SCANNER.py TCP_SCANNER.py
