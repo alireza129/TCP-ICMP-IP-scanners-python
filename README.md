@@ -1,357 +1,246 @@
-# Python Batch IP Scanners
+# Network Batch Scanners
 
-Two Python scripts for scanning large IP lists in batches using only the Python standard library.
+A set of interactive Python tools for high‑volume network scanning:
 
-- **TCP scanner**: tests one or more TCP ports on each IP by attempting a TCP connection.
-- **ICMP scanner**: sends ICMP echo requests using raw sockets to check whether a host replies.
+- `CIDR_Scanner.py`: TCP scan of IPv4 IPs and CIDR ranges, with CIDR expansion and sampling.
+- `ICMP_SCANNER.py`: Concurrent ICMP (ping) scanner from a text list of IPs, with resume support.
+- `TCP_SCANNER.py`: Concurrent TCP port scanner from a text list of IPs, across one or more ports.
 
-These scripts are built for large and interruptible runs, with support for batching, resume, validation, deduplication, retries, output files, and per-batch summaries.
+All tools are designed for long‑running, resumable scans with batching, progress display, and multiple output formats.
 
-## Quick Start
+---
 
-### TCP
-
-```bash
-python3 tcp_scanner.py
-```
-
-Example answers:
-
-```txt
-Path to txt file with IPs: ~/ips.txt
-Output filename base (example: tcp_results): tcp_results
-Timeout in seconds [default=1.5]:
-Retry count [default=0]:
-Batch size: 50
-Worker count: 50
-TCP ports to test (example: 80 or 80,443,22): 80,443,22
-Scan mode - sequential or randomized? [s/r, default=r]:
-Skip already-scanned IP:PORT entries from previous run? [Y/n]:
-Resume from saved progress if state exists? [Y/n]:
-How many batches do you want to do right now? [default=1]:
-```
-
-### ICMP
-
-```bash
-python3 icmp_scanner.py
-```
-
-Example answers:
-
-```txt
-Path to txt file with IPs: ~/ips.txt
-Output filename base (example: icmp_results): icmp_results
-Timeout in seconds [default=1.5]:
-Retry count [default=0]:
-Batch size: 100
-Worker count: 100
-Scan mode - sequential or randomized? [s/r, default=r]:
-Skip already-scanned IPs from previous run? [Y/n]:
-Resume from saved progress if state exists? [Y/n]:
-How many batches do you want to do right now? [default=1]:
-```
-
-## Table of Contents
+## Table of contents
 
 - [Features](#features)
 - [Requirements](#requirements)
-- [Important Note About ICMP](#important-note-about-icmp)
-- [Input File Format](#input-file-format)
-- [Output Files](#output-files)
-- [TCP Scanner Usage](#tcp-scanner-usage)
-- [ICMP Scanner Usage](#icmp-scanner-usage)
-- [Validation and Deduplication](#validation-and-deduplication)
-- [Resume Behavior](#resume-behavior)
-- [Skip Already-Scanned Behavior](#skip-already-scanned-behavior)
-- [Multi-Port TCP Mode](#multi-port-tcp-mode)
-- [Batch Summaries](#batch-summaries)
-- [Example Output Files](#example-output-files)
-- [Suggested Filenames](#suggested-filenames)
-- [Notes](#notes)
-- [Safety](#safety)
+- [Quick start](#quick-start)
+  - [CIDR scanner](#cidr-scanner)
+  - [ICMP scanner](#icmp-scanner)
+  - [TCP scanner](#tcp-scanner)
+- [Input formats](#input-formats)
+- [Outputs](#outputs)
+- [CLI options & prompts](#cli-options--prompts)
+- [Performance tips](#performance-tips)
+- [Safety & legal](#safety--legal)
+
+---
 
 ## Features
 
-### Shared features
+- **High‑throughput scanning** using Python’s `ThreadPoolExecutor` and tuneable worker counts for all scripts.
+- **Batching and progress bars** so you can control how much work is done per run and see live progress.
+- **Resume and skip logic** for ICMP/TCP scanners via state files and CSV history, so you can stop/restart without losing work.
+- **Rich outputs**: human‑readable `.txt`, structured `.csv`, and line‑delimited `.jsonl` for easy post‑processing.
+- **CIDR‑aware target handling**: expand IPv4 CIDRs or sample a single host per range, with duplicate and IPv6 filtering.
+- **Interactive configuration**: timeouts, retries, batch size, worker count, scan order (sequential/randomized), and more are prompted at runtime.
 
-Both scanners support:
-
-- Loading IPs from a `.txt` file
-- Accepting either one IP per line or comma-separated IPs
-- IP validation before scanning
-- Deduplication before scanning
-- Immediate saving of successful results while scanning
-- Export formats:
-  - `.txt`
-  - `.csv`
-  - `.jsonl`
-- Resume support using a state file
-- Optional skipping of already-scanned targets from a previous run
-- Configurable:
-  - batch size
-  - worker count
-  - timeout
-  - retry count
-- Running multiple batches in a row before prompting again
-- Per-batch progress bars
-- Per-batch summary stats
-
-### TCP scanner features
-
-The TCP scanner also supports:
-
-- Single-port scanning
-- Multi-port scanning
-- Success output in `IP:PORT` format
-- Optional skipping of already-scanned `IP:PORT` entries
-
-### ICMP scanner features
-
-The ICMP scanner also supports:
-
-- ICMP echo request / reply scanning
-- Success output in `IP` format
-- Immediate saving of successful replies while scanning
+---
 
 ## Requirements
 
-- Python 3
-- No third-party packages
+- Python 3.8+.
+- Standard library only (no external dependencies): `csv`, `ipaddress`, `json`, `socket`, `concurrent.futures`, etc.
+- For `ICMP_SCANNER.py`, raw socket permissions are required (e.g., root on Linux or Administrator on Windows).
 
-The scripts use only standard-library modules such as:
+---
 
-- `socket`
-- `pathlib`
-- `ipaddress`
-- `csv`
-- `json`
-- `random`
-- `time`
-- `concurrent.futures`
+## Quick start
 
-## Important Note About ICMP
+### General clone & run
 
-The ICMP scanner uses raw sockets.
+```bash
+git clone https://github.com/<your-username>/<your-repo>.git
+cd <your-repo>
 
-On most operating systems, raw ICMP sockets require elevated privileges:
-
-- **Linux/macOS**: usually run with `sudo`
-- **Windows**: usually run in an Administrator shell
-
-Without sufficient privileges, the ICMP scanner may fail with a permission error.
-
-## Input File Format
-
-The IP input file can use either of the following formats.
-
-### One IP per line
-
-```txt
-94.130.13.19
-94.130.50.12
-198.252.206.1
+# Make scripts executable (optional on Unix)
+chmod +x CIDR_Scanner.py ICMP_SCANNER.py TCP_SCANNER.py
 ```
 
-### Comma-separated
+Create an input file (examples in [Input formats](#input-formats)), then run the tool you need.
 
-```txt
-"94.130.13.19", "94.130.50.12", "198.252.206.1"
-```
+---
 
-## Output Files
+### CIDR scanner
 
-Each scanner saves successful results immediately so progress is not lost if the script is interrupted.
-
-If the output filename base is:
-
-```txt
-tcp_results
-```
-
-the script will generate:
-
-```txt
-tcp_results.txt
-tcp_results.csv
-tcp_results.jsonl
-tcp_results.state.json
-```
-
-### File meanings
-
-| File | Purpose |
-|---|---|
-| `.txt` | Simple list of successful results |
-| `.csv` | Structured output for spreadsheets, analysis, or automation |
-| `.jsonl` | Append-friendly JSON output, one object per line |
-| `.state.json` | Resume state for continuing from the last saved offset |
-
-## TCP Scanner Usage
+`CIDR_Scanner.py` takes a text file of IPv4 single IPs and/or CIDR ranges, expands them (or samples per range), and tests a single TCP port using concurrent connect attempts.
 
 Run:
 
 ```bash
-python3 tcp_scanner.py
+python3 CIDR_Scanner.py
 ```
 
-### Prompts
+Interactive prompts (you’ll see these in order):
 
-The TCP scanner prompts for:
+- `Path to txt file with IPs or CIDRs:` path to input list.
+- `Port to test (e.g. 80 or 443) [default=443]:` TCP port to scan.
+- `TCP connect timeout in seconds [default=2.0]:` per‑connection timeout.
+- `Batch size [default=256]:` how many targets to process per batch.
+- `Worker count [default=128]:` maximum concurrent connections.
+- `Max hosts per CIDR for all-host mode [default=65536]:` safety limit for CIDR expansion.
+- `Scan order - sequential or randomized? [s/r, default=r]:` order of targets.
+- `CIDR target mode - all hosts or one sample per CIDR? [a/o, default=o]:` expand all hosts or sample a single host.
+- After each batch: `Continue after batch X/Y? [Y/n or number of more batches]:` allows early stop or automatic continuation.
 
-1. Path to the IP text file
-2. Output filename base
-3. Timeout in seconds
-4. Retry count
-5. Batch size
-6. Worker count
-7. TCP ports to test
-8. Scan mode: sequential or randomized
-9. Whether to skip already-scanned `IP:PORT` entries
-10. Whether to resume from saved state
-11. How many batches to run right now
+Outputs:
 
-## ICMP Scanner Usage
+- `open_ips.txt`: one IP per line with the port open.
+- `open_ips.csv`: `IP, Ping (ms), Port, Source Range`.
+
+---
+
+### ICMP scanner
+
+`ICMP_SCANNER.py` sends ICMP echo requests (ping) to a list of IPv4 addresses and records latency and status.
 
 Run:
 
 ```bash
-python3 icmp_scanner.py
+sudo python3 ICMP_SCANNER.py
+# or run as Administrator on Windows
 ```
 
-### Prompts
+Interactive prompts:
 
-The ICMP scanner prompts for:
+- `Path to txt file with IPs:` input file of IPs.
+- `Output filename base (example: icmp_results):` base name for `.txt`, `.csv`, `.jsonl`, and state files.
+- `Timeout in seconds [default=1.5]:` ICMP reply timeout.
+- `Retry count [default=0]:` additional attempts per host.
+- `Batch size:` number of IPs per batch.
+- `Worker count:` number of concurrent workers.
+- `Scan mode - sequential or randomized? [s/r, default=r]:` host order.
+- `Skip already-scanned IPs from previous run? [Y/n]:` avoid re‑scanning existing entries from CSV.
+- `Resume from saved progress if state exists? [Y/n]:` continue from last offset using a `.state.json` file.
+- `How many batches do you want to do right now? [default=1]:` control amount of work per run, repeated between batches.
 
-1. Path to the IP text file
-2. Output filename base
-3. Timeout in seconds
-4. Retry count
-5. Batch size
-6. Worker count
-7. Scan mode: sequential or randomized
-8. Whether to skip already-scanned IPs
-9. Whether to resume from saved state
-10. How many batches to run right now
+Outputs (for base `icmp_results`):
 
-## Validation and Deduplication
+- `icmp_results.txt`: list of IPs that responded successfully.
+- `icmp_results.csv`: `timestamp, ip, status, latency_ms, error, attempts`.
+- `icmp_results.jsonl`: one JSON object per line with the same fields.
+- `icmp_results.state.json`: contains a simple `offset` used for resuming.
 
-Before scanning begins, both scripts:
+---
 
-- Parse the input file
-- Validate IP addresses
-- Skip invalid entries
-- Remove duplicates
+### TCP scanner
 
-This reduces wasted work and keeps the output cleaner.
+`TCP_SCANNER.py` takes a list of IPv4 IPs (no CIDR expansion) and scans one or more TCP ports concurrently.
 
-## Resume Behavior
+Run:
 
-Both scanners support resume using a saved state file.
-
-When resume is enabled, the script:
-
-- Loads the saved offset from `.state.json`
-- Continues from that position
-- Saves progress again after each processed batch
-
-This is useful for large scans or interrupted runs.
-
-## Skip Already-Scanned Behavior
-
-Both scanners can skip entries already present in prior output files.
-
-- The TCP scanner skips previously scanned `IP:PORT` entries
-- The ICMP scanner skips previously scanned IPs
-
-This avoids repeating old work when re-running a scan.
-
-## Multi-Port TCP Mode
-
-The TCP scanner supports more than one port in the same run.
-
-Example input:
-
-```txt
-80,443,22
+```bash
+python3 TCP_SCANNER.py
 ```
 
-Each IP will be tested against:
+Interactive prompts:
 
-- port 80
-- port 443
-- port 22
+- `Path to txt file with IPs:` input file of IPs.
+- `Output filename base (example: tcp_results):` base name for outputs.
+- `Timeout in seconds [default=1.5]:` TCP connect timeout.
+- `Retry count [default=0]:` retries per IP:port.
+- `Batch size:` number of IPs per batch (each batch expands to IP×ports tasks).
+- `Worker count:` maximum concurrent connections.
+- `TCP ports to test (example: 80 or 80,443,22):` comma‑separated list of ports, validated and deduplicated.
+- `Scan mode - sequential or randomized? [s/r, default=r]:` order of IPs.
+- `Skip already-scanned IP:PORT entries from previous run? [Y/n]:` uses CSV history to skip completed pairs.
+- `Resume from saved progress if state exists? [Y/n]:` uses a `.state.json` offset.
+- `How many batches do you want to do right now? [default=1]:` controls work per run, repeated between batches.
 
-Successful results are printed and saved as:
+Outputs (for base `tcp_results`):
 
-```txt
-198.252.206.1:443
+- `tcp_results.txt`: `ip:port` for successful connections.
+- `tcp_results.csv`: `timestamp, ip, port, status, latency_ms, error, attempts`.
+- `tcp_results.jsonl`: JSONL version of the same rows.
+- `tcp_results.state.json`: resume state with `offset`.
+
+---
+
+## Input formats
+
+### CIDR scanner input
+
+Text file containing IPv4 single IPs and/or CIDR ranges, one per line.
+
+Example:
+
+```text
+# Single hosts
+192.168.1.10
+10.0.0.5
+
+# CIDR ranges
+192.168.0.0/24
+10.0.0.0/16
 ```
 
-## Batch Summaries
+Notes:
 
-After each batch, the scripts print summary information such as:
+- Comments (`# ...`) and blank lines are ignored.
+- IPv6 entries and overly large CIDRs (in all‑hosts mode) are skipped and reported as invalid.
 
-- total scanned in the batch
-- total successes
-- success rate
-- average latency of successful results
-- remaining work
+### ICMP/TCP scanner input
 
-This helps with monitoring long scans.
+Text file with IPv4 addresses, separated by newlines or commas; quotes are stripped and duplicates removed.
 
-## Example Output Files
+Example:
 
-### TCP `.txt`
-
-```txt
-94.130.13.19:443
-198.252.206.1:80
-203.0.113.10:22
+```text
+192.168.1.10
+192.168.1.11, 192.168.1.12
+"8.8.8.8"
 ```
 
-### ICMP `.txt`
+---
 
-```txt
-94.130.13.19
-198.252.206.1
-203.0.113.10
-```
+## Outputs
 
-### TCP `.csv`
+The tools are designed to support both manual inspection and automated post‑processing.
 
-```csv
-timestamp,ip,port,status,latency_ms,error,attempts
-1715880000,94.130.13.19,443,success,23.44,,1
-1715880002,198.252.206.1,80,success,31.10,,1
-```
+| Script            | Success TXT                           | CSV columns                                 | JSONL fields                                      |
+|-------------------|---------------------------------------|---------------------------------------------|---------------------------------------------------|
+| `CIDR_Scanner.py` | `open_ips.txt` (one IP per line)      | `IP, Ping (ms), Port, Source Range`         | Same fields as CSV per JSON object                |
+| `ICMP_SCANNER.py` | `<base>.txt` (IP per successful ping) | `timestamp, ip, status, latency_ms, error`  | Same as CSV plus any additional metadata          |
+| `TCP_SCANNER.py`  | `<base>.txt` (`ip:port` per success)  | `timestamp, ip, port, status, latency_ms`   | Same as CSV plus any additional metadata          |
 
-### ICMP `.csv`
+You can post‑process the CSV/JSONL files with your own scripts, `pandas`, or command‑line tools like `jq` and `csvkit`.
 
-```csv
-timestamp,ip,status,latency_ms,error,attempts
-1715880100,94.130.13.19,success,18.52,,1
-1715880102,198.252.206.1,success,22.90,,1
-```
+---
 
-## Suggested Filenames
+## CLI options & prompts
 
-```txt
-tcp_scanner.py
-icmp_scanner.py
-README.md
-ips.txt
-```
+All three tools are fully interactive and will ask for:
 
-## Notes
+- Target file path (IPs or CIDRs depending on script).
+- Network timing: timeouts and optional retry counts.
+- Concurrency controls: batch size and worker count.
+- Scan order: sequential vs randomized, where supported.
+- Persistence: whether to resume from a saved state and/or skip already‑scanned entries.
+- Work chunking: how many batches to run in the current session.
 
-- Sequential mode scans IPs in file order.
-- Randomized mode shuffles the IP list before scanning starts.
-- JSONL is used because it is easy to append to during long-running scans.
-- Resume behavior is most reliable when the target order is preserved consistently between runs.
+Defaults are sensible for moderate scans, but you should adjust them based on your network size and host performance.
 
-## Safety
+---
 
-Use these scripts only on systems and networks that you own or are explicitly authorized to test.
+## Performance tips
 
-Large-scale TCP or ICMP scanning may trigger alerts, monitoring, throttling, or abuse detection on managed networks.
+- Start with a **small batch size** and **lower worker count** to verify connectivity and correctness before scaling up.
+- Increase workers and batch size gradually, watching for timeouts or connection errors.
+- Use randomized scan order if you want to distribute load more evenly across targets.
+- For very large scans, use the “skip already scanned” and “resume” options to spread the work across multiple sessions.
+
+---
+
+## Safety & legal
+
+These tools are intended for **authorized security testing and network inventory** on systems you own or have explicit permission to scan.
+
+- Do not scan networks or hosts without permission.
+- Be aware that aggressive scanning can trigger IDS/IPS systems or rate‑limiting.
+- Always comply with local laws, your organization’s policies, and the terms of service of any networks you interact with.
+
+---
+
+## License
+
+Add your preferred license here (e.g., MIT, Apache 2.0) and include a `LICENSE` file in the repository.
