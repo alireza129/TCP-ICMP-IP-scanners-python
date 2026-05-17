@@ -344,7 +344,6 @@ def run_scan(p, txt_file, csv_writer, stop_event, pause_event,
 
     while not exhausted and not stop_event.is_set():
         if max_batches and batch_num >= max_batches:
-            print(cyan(f"\n  Reached {max_batches} batch(es) for this session."))
             break
 
         batch = []
@@ -411,23 +410,6 @@ def run_scan(p, txt_file, csv_writer, stop_event, pause_event,
 
         if stop_event.is_set():
             break
-
-        if not exhausted:
-            action = ask_choice(
-                "Next action",
-                ["continue", "pause", "stop"],
-                default="continue",
-            )
-            if action == "stop":
-                stop_event.set()
-                break
-            if action == "pause":
-                print(yellow("  ⏸  Paused — press Enter to continue to the next batch."))
-                try:
-                    input(cyan("  Resume: press Enter when ready... "))
-                except (EOFError, KeyboardInterrupt):
-                    stop_event.set()
-                    break
 
     return exhausted
 
@@ -525,11 +507,6 @@ def start_scan(p):
             if stop_event.is_set() or exhausted:
                 break
 
-            # ── stop listener so it doesn't eat the next input() call ────
-            listen_stop.set()
-            # listener is blocked on input(); it will exit on its own after
-            # the user types something OR when the process moves on (daemon).
-
             # ── prompt: run more batches? ─────────────────────────────────
             print(bold(cyan("\n  ── Session complete ─────────────────────────────")))
             print(f"  Open so far : {green(str(open_total_ref[0]))}  |  "
@@ -537,24 +514,21 @@ def start_scan(p):
                   f"Saved → {p['txt_output']}")
             print(cyan("  ──────────────────────────────────────────────────"))
 
-            more = ask_choice(
-                "Run more batches or stop and save?",
-                ["more", "stop"], default="stop",
+            print(dim("  Enter number of extra batches, or 0 for all remaining, or leave blank to do 1 more."))
+            extra_raw = ask(
+                "Extra batches (0 = all remaining, s = stop)",
+                default="1", cast=str,
             )
-            if more == "stop":
+            val = extra_raw.strip().lower()
+            if val in ("s", "stop"):
                 break
+            try:
+                n = int(val)
+            except ValueError:
+                n = 1
+            p["max_batches"] = None if n == 0 else max(n, 1)
 
-            extra = ask(
-                "How many more batches?", default=p["max_batches"] or 1,
-                cast=int,
-                validate=lambda v: None if v > 0 else "must be > 0",
-            )
-            p["max_batches"] = extra
 
-            # restart the input listener for the new session
-            listen_stop.clear()
-            listener = threading.Thread(target=_input_listener, daemon=True)
-            listener.start()
 
     finally:
         txt_file.close()
