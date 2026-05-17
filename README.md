@@ -69,8 +69,8 @@ This repository contains three tools for high‑volume IP scanning: an ICMP ping
 ### Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/alireza129/TCP-ICMP-CIDR-IP-scanners-python.git
+cd TCP-ICMP-CIDR-IP-scanners-python
 ```
 
 Replace `<your-username>` and `<your-repo>` as appropriate.
