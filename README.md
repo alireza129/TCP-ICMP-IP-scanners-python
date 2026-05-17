@@ -155,14 +155,14 @@ You will be prompted for:
 
 ---
 
-## TCP GUI scanner – `scanner_gui-3.py`
+## TCP GUI scanner – `scanner_gui.py`
 
 The GUI tool scans a TCP port across an IP/CIDR list using a streaming architecture and a dark Tkinter dashboard.
 
 ### Running
 
 ```bash
-python3 scanner_gui-3.py
+python3 scanner_gui.py
 ```
 
 ### Configuration (left panel)
@@ -215,7 +215,7 @@ python3 scanner_gui-3.py
 
 ---
 
-## TCP CLI scanner – `scanner_cli-2.py`
+## TCP CLI scanner – `scanner_cli.py`
 
 The CLI scanner is an interactive terminal utility with colored output and batch‑based control.
 
