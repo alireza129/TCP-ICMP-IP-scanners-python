@@ -1,221 +1,309 @@
-# Network Batch Scanners
+# High‑Volume IP Scanner Toolkit
 
-A set of Python tools for high-volume network scanning:
+This repository contains three tools for high‑volume IP scanning: an ICMP ping scanner and both GUI and CLI TCP scanners that support IP lists and CIDR ranges without ever fully expanding large networks into memory.
 
-- `scanner_gui.py`: TCP scan of IPv4 IPs and CIDR ranges with a full dark-themed GUI, streaming CIDR architecture, and real-time KPI dashboard.
-- `ICMP_SCANNER.py`: Concurrent ICMP (ping) scanner from a flat IP list, with resume support and multi-format output.
+- `ICMP_SCANNER.py`: Parallel ICMP ping scanner for IPv4 addresses from a text file.
+- `scanner_gui-3.py`: Tkinter desktop app for TCP port scanning over IPv4 / CIDR targets.
+- `scanner_cli-2.py`: Terminal‑first TCP port scanner with interactive prompts and colored output.
+- Windows users can also download a prebuilt `.exe` from the Releases page.
 
-All tools are designed for long-running scans with batching, progress display, and multiple output formats.
-
----
-
-## Table of Contents
-
-- [Features](#features)
-- [Requirements](#requirements)
-- [Quick Start](#quick-start)
-  - [TCP Scanner (GUI)](#tcp-scanner-gui)
-  - [ICMP Scanner](#icmp-scanner)
-- [Input Formats](#input-formats)
-- [Outputs](#outputs)
-- [Configuration Reference](#configuration-reference)
-- [Performance Tips](#performance-tips)
-- [Safety & Legal](#safety--legal)
-- [License](#license)
+> ⚠️ Intended for legitimate network diagnostics and research on networks you own or are explicitly authorized to test.
 
 ---
 
 ## Features
 
-- **High-throughput scanning** using Python's `ThreadPoolExecutor` with tuneable worker counts.
-- **Streaming CIDR architecture** in `scanner_gui.py`: CIDRs are never fully expanded into RAM — memory cost is `O(lines)`, not `O(total IPs)`.
-- **Real-time GUI dashboard** with live KPI cards (Total Targets, Scanned, Open, Open Rate), progress bar, log view, and an Open IPs results table.
-- **Pause / Resume / Stop** scan controls during an active scan.
-- **Batching and progress bars** so you can control how much work is done per run and see live progress.
-- **Resume and skip logic** for the ICMP scanner via `.state.json` checkpoint and CSV history, so you can stop and restart without losing work.
-- **Rich outputs**: human-readable `.txt`, structured `.csv`, and line-delimited `.jsonl` (ICMP) for easy post-processing.
-- **CIDR-aware target handling**: expand IPv4 CIDRs, sample a single host per CIDR, or cap large CIDRs to a fixed number of targets.
-- **Host-based CIDR normalization**: entries such as `52.1.1.1/15` are accepted and normalized to their enclosing network via `ipaddress.ip_network(..., strict=False)`.
-- **Large CIDR cap strategy**: when a CIDR exceeds the configured per-CIDR limit in all-host mode, targets are selected either sequentially (first N hosts) or via reservoir sampling (random N without materializing the full list).
-- **Deduplication**: single IPs and sampled CIDR targets are deduplicated at load time; full CIDR expansions are deduplicated during streaming with a global seen-set.
+### ICMP scanner
+
+- Raw ICMP echo requests with RTT (latency) measurement.
+- Parallel scanning via `ThreadPoolExecutor` with configurable batch size and worker count.
+- Resume support via `<output>.state.json` plus “skip already scanned IPs” using previous CSV runs.
+- Outputs successful IPs to:
+  - `<base>.txt` – successful IPs only.
+  - `<base>.csv` – timestamp, IP, status, latency, error, attempts.
+  - `<base>.jsonl` – JSON lines mirroring CSV rows.
+
+### TCP scanners (GUI + CLI)
+
+- Accept plain IPv4 addresses and CIDR ranges from a text file.
+- Streaming architecture: CIDRs are never fully expanded into RAM (only descriptors are stored).
+- Modes:
+  - `sample`: first host of each CIDR only.
+  - `all`: all hosts up to a configurable cap per CIDR.
+- Randomized or sequential scan order across targets.
+- Parallel TCP connect probes with configurable batch size and thread count.
+- Outputs open hosts to:
+  - Text file (`open_ips.txt` style) with one IP per line.
+  - CSV with IP, port, latency, and original source range.
+- Deduplication across descriptors so each IP is scanned at most once.
+
+### GUI‑specific (scanner_gui-3.py)
+
+- Dark‑themed Tkinter app with:
+  - Left config panel (targets, connection, performance, CIDR options, output files).
+  - Right dashboard with progress bar, KPIs, log tab, and open‑hosts table.
+- Live KPIs: total targets, scanned, open count, open rate.
+- Start / pause / resume / stop controls.
+- Export discovered open hosts as CSV from the GUI.
+
+### CLI‑specific (scanner_cli-2.py)
+
+- Interactive prompts with defaults, validation, and ANSI color output.
+- Batch‑oriented control loop:
+  - Continue, pause, or stop between batches.
+- Graceful Ctrl+C handling:
+  - Finishes the current batch, saves results, and exits cleanly.
+- Output files opened in append mode; CSV header written only for new files.
 
 ---
 
-## Requirements
+## Installation
 
-- Python **3.8+**
-- Standard library only — no external dependencies: `csv`, `ipaddress`, `json`, `socket`, `tkinter`, `concurrent.futures`, etc.
-- For `ICMP_SCANNER.py`, raw socket permissions are required (root on Linux/macOS, Administrator on Windows).
+### Requirements
 
----
+- Python 3.8+.
+- Standard library modules only (no external dependencies), including:
+  - `ipaddress`, `socket`, `concurrent.futures`, `threading`, `csv`, `json`, `tkinter` (for GUI), etc.
+- On some Linux distros you may need to install Tk bindings separately, e.g. `python3-tk` (or distro equivalent) to run the GUI.
 
-## Quick Start
+### Clone the repository
 
 ```bash
-git clone https://github.com/alireza129/TCP-ICMP-CIDR-IP-scanners-python.git
-cd TCP-ICMP-CIDR-IP-scanners-python
+git clone https://github.com/<your-username>/<your-repo>.git
+cd <your-repo>
 ```
 
-Create an input file (see [Input Formats](#input-formats)), then run the tool you need.
+Replace `<your-username>` and `<your-repo>` as appropriate.
+
+### Windows EXE
+
+For a no‑Python setup on Windows:
+
+1. Go to the **Releases** section of this repository.
+2. Download the latest `.exe`.
+3. Run it directly from Explorer or the command prompt.
 
 ---
 
-### TCP Scanner (GUI)
+## Input file format (all tools)
 
-`scanner_gui.py` takes a text file of IPv4 single IPs and/or CIDR ranges, streams them lazily (never loading the full expansion into RAM), and tests a single TCP port using concurrent connect attempts.
+All three tools read targets from a plain text file.
 
-```bash
-python3 scanner_gui.py
-```
+- One item per line.
+- Each line can be:
+  - A single IPv4 address, e.g. `192.0.2.10`
+  - A CIDR range, e.g. `203.0.113.0/24`
+- Lines starting with `#` are treated as comments and ignored.
+- IPv6 entries are skipped.
 
-**Workflow:**
-
-1. Click **Browse** to select your IP/CIDR list `.txt` file.
-2. Configure connection, performance, and CIDR settings in the left panel.
-3. Set output file names (default: `open_ips.txt` / `open_ips.csv`).
-4. Click **▶ Start Scan**. Use **⏸ Pause** / **■ Stop** as needed.
-5. Switch to the **Open IPs** tab to inspect results, or click **Export CSV** at any time.
-
-**Behavior notes:**
-
-- CIDRs with host bits set (e.g. `52.1.1.1/15`) are accepted and normalized automatically.
-- In **sample** mode, only the first usable host of each CIDR is scanned.
-- In **all-host** mode:
-  - CIDRs at or below the cap are fully expanded and streamed.
-  - Oversized CIDRs are capped to the configured limit using either sequential or reservoir-random selection.
-- `/31` and `/32` ranges are handled explicitly to always yield scan targets.
-- Results are written to `.txt` and `.csv` incrementally during the scan (not only at the end).
-
-**Outputs:**
-
-- `open_ips.txt` — one IP per line where the port was open.
-- `open_ips.csv` — columns: `IP, Ping (ms), Port, Source Range`.
-
----
-
-### ICMP Scanner
-
-`ICMP_SCANNER.py` sends raw ICMP echo requests (ping) to a flat list of IPv4 addresses and records latency and status.
-
-```bash
-# Linux / macOS
-sudo python3 ICMP_SCANNER.py
-
-# Windows (run terminal as Administrator)
-python ICMP_SCANNER.py
-```
-
-**Interactive prompts (in order):**
-
-| Prompt | Default | Description |
-|---|---|---|
-| `Path to txt file with IPs:` | — | Input IP list |
-| `Output filename base:` | `icmp_results` | Base name for all output files |
-| `Timeout in seconds:` | `1.5` | ICMP reply timeout per host |
-| `Retry count:` | `0` | Additional attempts per host on failure |
-| `Batch size:` | — | Number of IPs per batch |
-| `Worker count:` | — | Concurrent ICMP workers |
-| `Scan mode:` | `r` (randomized) | `s` = sequential, `r` = randomized |
-| `Skip already-scanned IPs?` | `Y` | Skip IPs already present in the output CSV |
-| `Resume from saved progress?` | `Y` | Continue from `.state.json` offset |
-| `How many batches to run now?` | `1` | Repeated between batches to control work per session |
-
-**Outputs** (for base name `icmp_results`):
-
-| File | Content |
-|---|---|
-| `icmp_results.txt` | IPs that responded successfully, one per line |
-| `icmp_results.csv` | `timestamp, ip, status, latency_ms, error, attempts` |
-| `icmp_results.jsonl` | One JSON object per successful response |
-| `icmp_results.state.json` | Resume checkpoint (`offset` into IP list) |
-
----
-
-## Input Formats
-
-### TCP Scanner (GUI) — CIDR List
-
-Text file with IPv4 addresses and/or CIDR ranges, one per line.
+Example:
 
 ```text
-# Single hosts
-192.168.1.10
-10.0.0.5
+# single IPs
+192.0.2.10
+198.51.100.5
 
-# CIDR ranges
-192.168.0.0/24
-10.0.0.0/16
-
-# Host-based CIDRs are accepted and auto-normalized
-52.1.1.1/15
+# CIDRs
+203.0.113.0/24
+203.0.113.128/25
 ```
 
-- Comments (`# ...`) and blank lines are ignored.
-- IPv6 entries are skipped and reported as invalid in the log.
-- Host-based CIDRs are normalized with `strict=False`.
+---
 
-### ICMP Scanner — IP List
+## ICMP scanner – `ICMP_SCANNER.py`
 
-Text file with IPv4 addresses, separated by newlines or commas; quotes are stripped and duplicates removed.
+The ICMP scanner takes a file of IPv4 addresses (no CIDRs) and probes each with ICMP echo requests using raw sockets.
+
+### Running
+
+```bash
+python3 ICMP_SCANNER.py
+```
+
+### Interactive flow
+
+You will be prompted for:
+
+1. **Path to txt file with IPs**  
+   - One IPv4 address per line.
+
+2. **Output filename base**  
+   - Example: `icmp_results`  
+   - Produces:
+     - `icmp_results.txt` – successful IPs.
+     - `icmp_results.csv` – timestamp, IP, status, latency, error, attempts.
+     - `icmp_results.jsonl` – JSONL rows matching CSV.
+
+3. **Parameters**
+   - Timeout in seconds (default: `1.5`).
+   - Retry count (default: `0`).
+   - Batch size (number of IPs per batch).
+   - Worker count (number of threads per batch).
+   - Scan mode: sequential or randomized.
+   - Skip already scanned IPs from previous run? (yes/no).
+   - Resume from saved progress if state exists? (yes/no).
+
+4. **Batches**
+   - You choose how many batches to run in each session.
+   - After each set of batches, you can run more until all IPs are processed.
+
+### Notes
+
+- Uses raw ICMP sockets, so you typically must run as **Administrator / root**.
+- Maintains a `<base>.state.json` file to resume from where it left off.
+- Reads previous CSV to avoid re‑scanning IPs when “skip already scanned” is enabled.
+
+---
+
+## TCP GUI scanner – `scanner_gui-3.py`
+
+The GUI tool scans a TCP port across an IP/CIDR list using a streaming architecture and a dark Tkinter dashboard.
+
+### Running
+
+```bash
+python3 scanner_gui-3.py
+```
+
+### Configuration (left panel)
+
+- **Target File**
+  - *IP / CIDR list (.txt)* – browse to your input file.
+
+- **Connection**
+  - *Port* – TCP port to probe (default: `443`).
+  - *Timeout (seconds)* – per‑connection timeout (default: `2.0`).
+
+- **Performance**
+  - *Batch size* – hosts per batch (default: `256`).
+  - *Worker threads* – parallel connections per batch (default: `128`).
+
+- **CIDR Options**
+  - *Max hosts per CIDR* – per‑CIDR cap (default: `65536`).
+  - *Target mode*:
+    - `sample` – only the first host from each CIDR.
+    - `all` – all hosts up to the per‑CIDR cap.
+  - *Scan order*:
+    - `randomized` – shuffle descriptors, then stream.
+    - `sequential` – keep descriptor order.
+  - *Cap strategy*:
+    - `random` – random sample up to max hosts.
+    - `sequential` – first N hosts from the range.
+
+- **Output Files**
+  - *Text output* – path for open hosts txt (e.g. `open_ips.txt`).
+  - *CSV output* – path for open hosts CSV (e.g. `open_ips.csv`).
+
+### Controls
+
+- **▶ Start Scan** – start scanning in a background thread.
+- **⏸ Pause / ▶ Resume** – pause/resume between operations.
+- **■ Stop** – stop the scan; saved results remain on disk.
+- **Export CSV** (Open IPs tab) – export discovered open hosts to a user‑chosen CSV file.
+
+### Output
+
+- **Text file:** one open IP per line.
+- **CSV:** columns
+  - `IP`
+  - `Ping (ms)` (latency)
+  - `Port`
+  - `Source Range` (original line from input file)
+- **Open IPs tab:** table of discovered hosts with latency and source range.
+- **KPIs:** total targets, scanned count, open count, open rate (updated live).
+- **Log tab:** detailed log of batches and per‑IP results.
+
+---
+
+## TCP CLI scanner – `scanner_cli-2.py`
+
+The CLI scanner is an interactive terminal utility with colored output and batch‑based control.
+
+### Running
+
+```bash
+python3 scanner_cli-2.py
+```
+
+### Interactive prompts
+
+1. **Target File**
+   - `IP / CIDR list (.txt)` – validated for existence.
+
+2. **Connection**
+   - `Port` – default `443`, must be in `1–65535`.
+   - `Timeout (seconds)` – default `2.0`, must be `> 0`.
+
+3. **Performance**
+   - `Batch size` – default `256`, must be `> 0`.
+   - `Worker threads` – default `128`, must be `> 0`.
+   - `Max batches to run (default 5, 0 = unlimited)`.
+
+4. **CIDR Options**
+   - `Max hosts per CIDR` – default `65536`, must be `> 0`.
+   - `Target mode` – `sample` (first IP only) or `all`.
+   - `Scan order` – `randomized` or `sequential`.
+   - `Cap strategy` – `random` or `sequential` when CIDR exceeds max hosts.
+
+5. **Output Files**
+   - `Text output file` – default `open_ips.txt`.
+   - `CSV output file` – default `open_ips.csv`.
+
+### Behavior
+
+- Loads descriptors and prints summary:
+  - number of descriptors,
+  - estimated total hosts,
+  - invalid or skipped entries,
+  - number of single IPs, CIDR entries, and capped CIDRs.
+- Scans in batches; after each batch:
+  - Choose `continue`, `pause`, or `stop`.
+- Ctrl+C:
+  - Finishes the current batch,
+  - Saves results,
+  - Exits cleanly.
+- Streaming target generation:
+  - IPs produced on‑the‑fly, never holding all expanded hosts in RAM.
+- Output files:
+  - Text file in append mode – one open IP per line.
+  - CSV in append mode – header written only if file is new.
+
+### Output format
+
+- **Text:** open IPs only.
+- **CSV columns:**
+  - `IP`
+  - `Ping (ms)` (latency)
+  - `Port`
+  - `Source Range`
+- **Progress:** live progress bar on stderr:
+  - percent complete,
+  - scanned count,
+  - number open,
+  - approximate rate in hosts/second.
+- **Per‑IP log:** lines like:
 
 ```text
-192.168.1.10
-192.168.1.11, 192.168.1.12
-"8.8.8.8"
+✓ 203.0.113.5:443 12.5 ms ← 203.0.113.0/24 [rnd 1024/65536]
 ```
 
----
-
-## Outputs
-
-| Script | Success TXT | CSV Columns | JSONL |
-|---|---|---|---|
-| `scanner_gui.py` | `open_ips.txt` (one IP per line) | `IP, Ping (ms), Port, Source Range` | Not generated |
-| `ICMP_SCANNER.py` | `<base>.txt` (IPs that responded) | `timestamp, ip, status, latency_ms, error, attempts` | Same fields as CSV |
-
-You can post-process the CSV/JSONL output with `pandas`, `jq`, `csvkit`, or any standard tooling.
+(with ANSI colors when attached to a TTY).
 
 ---
 
-## Configuration Reference
+## Script comparison
 
-### `scanner_gui.py` Settings
-
-| Setting | Default | Description |
-|---|---|---|
-| Port | `443` | TCP port to probe |
-| Timeout | `2.0s` | Per-connection timeout |
-| Batch size | `256` | IPs dispatched per batch |
-| Worker threads | `128` | Concurrent TCP connections |
-| Max hosts/CIDR | `65536` | Cap for oversized CIDRs in all-host mode |
-| Target mode | `sample` | `sample` = first IP per CIDR; `all` = full expansion (with cap) |
-| Scan order | `randomized` | `randomized` shuffles descriptor list; `sequential` preserves file order |
-| Cap strategy | `random` | How oversized CIDRs are sampled: `random` (reservoir) or `sequential` (first N) |
+| Script           | Protocol | Interface | Input           | Output                        | Resume / Control                                |
+|------------------|----------|-----------|-----------------|-------------------------------|-------------------------------------------------|
+| `ICMP_SCANNER.py`  | ICMP     | CLI       | IP list (.txt)  | `.txt`, `.csv`, `.jsonl`      | State file, batch count, worker pool, resume    |
+| `scanner_gui-3.py` | TCP      | GUI       | IP/CIDR list    | `.txt`, `.csv`, GUI table     | Streaming batches, pause/resume/stop buttons    |
+| `scanner_cli-2.py` | TCP      | CLI       | IP/CIDR list    | `.txt`, `.csv`                | Batch loop with continue/pause/stop, Ctrl+C     |
 
 ---
 
-## Performance Tips
+## Legal and safety notes
 
-- Start with a **small batch size** and **low worker count** to verify connectivity and correctness before scaling up.
-- Increase workers and batch size gradually, watching for timeouts or connection errors in the log.
-- Use **randomized** scan order to distribute load evenly across a large target space.
-- For very large CIDRs, set a small per-CIDR cap first to validate behavior before scanning broader subsets.
-- Use **sequential** cap strategy for deterministic coverage; use **random** (reservoir) for broader distribution across large ranges without materializing the full list.
-- For very large ICMP scans, use the skip-already-scanned and resume options to spread work across multiple sessions.
-
----
-
-## Safety & Legal
-
-These tools are intended for **authorized security testing and network inventory** on systems you own or have explicit written permission to scan.
-
-- Do not scan networks or hosts without permission.
-- Aggressive scanning can trigger IDS/IPS systems or rate-limiting.
-- Always comply with local laws, your organization's policies, and the terms of service of any networks you interact with.
-
----
-
-## License
-
-This project is licensed under the **GNU General Public License (GPL)**.  
-See the `LICENSE` file for the full license text.
+- These tools generate significant network traffic; **only scan hosts and networks you own or are explicitly authorized to test**.
+- ICMP scanning requires raw socket privileges (root/Administrator).
+- Misuse may violate laws or acceptable use policies and can trigger IDS/IPS or firewall rules.
+- The author(s) assume no liability for misuse or damage caused by these tools.
