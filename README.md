@@ -3,8 +3,8 @@
 This repository contains three tools for high‑volume IP scanning: an ICMP ping scanner and both GUI and CLI TCP scanners that support IP lists and CIDR ranges without ever fully expanding large networks into memory.
 
 - `ICMP_SCANNER.py`: Parallel ICMP ping scanner for IPv4 addresses from a text file.
-- `scanner_gui-3.py`: Tkinter desktop app for TCP port scanning over IPv4 / CIDR targets.
-- `scanner_cli-2.py`: Terminal‑first TCP port scanner with interactive prompts and colored output.
+- `scanner_gui.py`: Tkinter desktop app for TCP port scanning over IPv4 / CIDR targets.
+- `scanner_cli.py`: Terminal‑first TCP port scanner with interactive prompts and colored output.
 - Windows users can also download a prebuilt `.exe` from the Releases page.
 
 > ⚠️ Intended for legitimate network diagnostics and research on networks you own or are explicitly authorized to test.
@@ -222,7 +222,7 @@ The CLI scanner is an interactive terminal utility with colored output and batch
 ### Running
 
 ```bash
-python3 scanner_cli-2.py
+python3 scanner_cli.py
 ```
 
 ### Interactive prompts
