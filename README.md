@@ -296,8 +296,8 @@ python3 scanner_cli.py
 | Script           | Protocol | Interface | Input           | Output                        | Resume / Control                                |
 |------------------|----------|-----------|-----------------|-------------------------------|-------------------------------------------------|
 | `ICMP_SCANNER.py`  | ICMP     | CLI       | IP list (.txt)  | `.txt`, `.csv`, `.jsonl`      | State file, batch count, worker pool, resume    |
-| `scanner_gui-3.py` | TCP      | GUI       | IP/CIDR list    | `.txt`, `.csv`, GUI table     | Streaming batches, pause/resume/stop buttons    |
-| `scanner_cli-2.py` | TCP      | CLI       | IP/CIDR list    | `.txt`, `.csv`                | Batch loop with continue/pause/stop, Ctrl+C     |
+| `scanner_gui.py` | TCP      | GUI       | IP/CIDR list    | `.txt`, `.csv`, GUI table     | Streaming batches, pause/resume/stop buttons    |
+| `scanner_cli.py` | TCP      | CLI       | IP/CIDR list    | `.txt`, `.csv`                | Batch loop with continue/pause/stop, Ctrl+C     |
 
 ---
 
