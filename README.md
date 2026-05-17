@@ -52,8 +52,8 @@ All tools are designed for long-running scans with batching, progress display, a
 ## Quick Start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
-cd YOUR_REPO
+git clone https://github.com/alireza129/TCP-ICMP-CIDR-IP-scanners-python.git
+cd TCP-ICMP-CIDR-IP-scanners-python
 ```
 
 Create an input file (see [Input Formats](#input-formats)), then run the tool you need.
