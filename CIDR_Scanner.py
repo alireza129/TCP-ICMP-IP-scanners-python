@@ -6,6 +6,7 @@ import socket
 import sys
 import time
 from pathlib import Path
+from itertools import islice
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -55,6 +56,16 @@ def ask_target_mode():
     if raw in {"a", "all"}:
         return "all"
     return "sample"
+
+
+def ask_cidr_cap_mode():
+    raw = input(
+        "When a CIDR exceeds the per-CIDR target cap, choose targets sequentially or randomly? "
+        "[s/r, default=r]: "
+    ).strip().lower()
+    if raw in {"s", "seq", "sequential"}:
+        return "sequential"
+    return "random"
 
 
 def ask_continue_batches(batch_number, total_batches):
@@ -130,17 +141,25 @@ def reservoir_sample(iterable, k: int):
     return sample
 
 
-def expand_cidr_targets(raw_cidr: str, target_mode: str, max_cidr_hosts: int):
+def take_first_n(iterable, n: int):
+    if n <= 0:
+        return []
+    return list(islice(iterable, n))
+
+
+def expand_cidr_targets(raw_cidr: str, target_mode: str, max_cidr_hosts: int, cidr_cap_mode: str):
     """
     Parse a CIDR that may contain host bits, normalize it, and return:
-      normalized_net, selected_targets, total_scanable_hosts, sampled_down
+      normalized_net, selected_targets, total_scanable_hosts, capped_down
 
     sample mode:
       - returns one host per CIDR
 
     all mode:
       - returns all scanable hosts if <= max_cidr_hosts
-      - otherwise returns a random sample of max_cidr_hosts hosts
+      - otherwise returns either:
+          * first max_cidr_hosts sequential hosts, or
+          * max_cidr_hosts random hosts
     """
     net = ipaddress.ip_network(raw_cidr, strict=False)
 
@@ -162,12 +181,16 @@ def expand_cidr_targets(raw_cidr: str, target_mode: str, max_cidr_hosts: int):
         targets = [str(ip) for ip in iter_scan_hosts(net)]
         return net, targets, total_scanable_hosts, False
 
-    sampled = reservoir_sample(iter_scan_hosts(net), max_cidr_hosts)
-    sampled_targets = [str(ip) for ip in sampled]
-    return net, sampled_targets, total_scanable_hosts, True
+    if cidr_cap_mode == "sequential":
+        selected = take_first_n(iter_scan_hosts(net), max_cidr_hosts)
+    else:
+        selected = reservoir_sample(iter_scan_hosts(net), max_cidr_hosts)
+
+    selected_targets = [str(ip) for ip in selected]
+    return net, selected_targets, total_scanable_hosts, True
 
 
-def load_targets(file_path: str, max_cidr_hosts: int, target_mode: str):
+def load_targets(file_path: str, max_cidr_hosts: int, target_mode: str, cidr_cap_mode: str):
     path = Path(file_path).expanduser()
     if not path.is_file():
         raise FileNotFoundError(f"File not found: {path}")
@@ -181,6 +204,7 @@ def load_targets(file_path: str, max_cidr_hosts: int, target_mode: str):
         "cidr_entries": 0,
         "expanded_from_cidr": 0,
         "sampled_from_cidr": 0,
+        "cidrs_capped_sequentially": 0,
         "cidrs_capped_randomly": 0,
         "duplicates_removed": 0,
         "invalid_items": 0,
@@ -199,17 +223,21 @@ def load_targets(file_path: str, max_cidr_hosts: int, target_mode: str):
                     stats["cidr_entries"] += 1
 
                     try:
-                        normalized_net, cidr_targets, total_scanable_hosts, sampled_down = expand_cidr_targets(
+                        normalized_net, cidr_targets, total_scanable_hosts, capped_down = expand_cidr_targets(
                             raw_cidr=raw,
                             target_mode=target_mode,
                             max_cidr_hosts=max_cidr_hosts,
+                            cidr_cap_mode=cidr_cap_mode,
                         )
                     except ValueError as e:
                         invalid.append(f"{raw} ({e})")
                         continue
 
-                    if sampled_down:
-                        stats["cidrs_capped_randomly"] += 1
+                    if capped_down:
+                        if cidr_cap_mode == "sequential":
+                            stats["cidrs_capped_sequentially"] += 1
+                        else:
+                            stats["cidrs_capped_randomly"] += 1
 
                     if target_mode == "sample":
                         s = cidr_targets[0]
@@ -321,11 +349,16 @@ def main():
     scan_mode = ask_scan_mode()
     target_mode = ask_target_mode()
 
+    cidr_cap_mode = "random"
+    if target_mode == "all":
+        cidr_cap_mode = ask_cidr_cap_mode()
+
     try:
         targets, invalid, stats = load_targets(
             file_path=file_path,
             max_cidr_hosts=max_cidr_hosts,
             target_mode=target_mode,
+            cidr_cap_mode=cidr_cap_mode,
         )
     except Exception as e:
         print(f"Failed to load targets: {e}")
@@ -349,7 +382,8 @@ def main():
     print(f"CIDR entries: {stats['cidr_entries']}")
     print(f"Hosts added from CIDR: {stats['expanded_from_cidr']}")
     print(f"CIDRs sampled once: {stats['sampled_from_cidr']}")
-    print(f"CIDRs randomly capped in all-host mode: {stats['cidrs_capped_randomly']}")
+    print(f"CIDRs capped sequentially: {stats['cidrs_capped_sequentially']}")
+    print(f"CIDRs capped randomly: {stats['cidrs_capped_randomly']}")
     print(f"Duplicates removed: {stats['duplicates_removed']}")
     print(f"Target mode: {target_mode}")
     print(f"Scan order: {scan_mode}")
@@ -359,6 +393,7 @@ def main():
     print(f"Worker count: {worker_count}")
     if target_mode == "all":
         print(f"Max targets per CIDR in all-host mode: {max_cidr_hosts}")
+        print(f"Oversized CIDR cap strategy: {cidr_cap_mode}")
     print("-" * 60)
 
     txt_output = "open_ips.txt"
