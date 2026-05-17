@@ -37,7 +37,7 @@ This repository contains three tools for high‑volume IP scanning: an ICMP ping
   - CSV with IP, port, latency, and original source range.
 - Deduplication across descriptors so each IP is scanned at most once.
 
-### GUI‑specific (scanner_gui-3.py)
+### GUI‑specific (scanner_gui.py)
 
 - Dark‑themed Tkinter app with:
   - Left config panel (targets, connection, performance, CIDR options, output files).
@@ -46,7 +46,7 @@ This repository contains three tools for high‑volume IP scanning: an ICMP ping
 - Start / pause / resume / stop controls.
 - Export discovered open hosts as CSV from the GUI.
 
-### CLI‑specific (scanner_cli-2.py)
+### CLI‑specific (scanner_cli.py)
 
 - Interactive prompts with defaults, validation, and ANSI color output.
 - Batch‑oriented control loop:
