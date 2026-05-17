@@ -79,8 +79,92 @@ def ask_continue_batches(batch_number, total_batches):
         print("Enter Y, N, or a positive number like 50.")
 
 
-def first_usable_host(net):
-    return next(net.hosts(), None)
+def iter_scan_hosts(net: ipaddress.IPv4Network):
+    """
+    Return the actual IPv4 targets this scanner should probe for a CIDR.
+
+    Behavior:
+    - /32 -> the single address itself
+    - /31 -> both addresses
+    - everything else -> usable hosts() only
+    """
+    if net.prefixlen == 32:
+        yield net.network_address
+    elif net.prefixlen == 31:
+        yield net.network_address
+        yield net.broadcast_address
+    else:
+        yield from net.hosts()
+
+
+def count_scan_hosts(net: ipaddress.IPv4Network) -> int:
+    if net.prefixlen == 32:
+        return 1
+    if net.prefixlen == 31:
+        return 2
+    return max(net.num_addresses - 2, 0)
+
+
+def first_scan_host(net: ipaddress.IPv4Network):
+    for ip in iter_scan_hosts(net):
+        return ip
+    return None
+
+
+def reservoir_sample(iterable, k: int):
+    """
+    Uniform random sample of size k from an iterable of unknown/large length.
+    Returns a list of sampled items.
+    """
+    if k <= 0:
+        return []
+
+    sample = []
+    for i, item in enumerate(iterable):
+        if i < k:
+            sample.append(item)
+        else:
+            j = random.randint(0, i)
+            if j < k:
+                sample[j] = item
+    return sample
+
+
+def expand_cidr_targets(raw_cidr: str, target_mode: str, max_cidr_hosts: int):
+    """
+    Parse a CIDR that may contain host bits, normalize it, and return:
+      normalized_net, selected_targets, total_scanable_hosts, sampled_down
+
+    sample mode:
+      - returns one host per CIDR
+
+    all mode:
+      - returns all scanable hosts if <= max_cidr_hosts
+      - otherwise returns a random sample of max_cidr_hosts hosts
+    """
+    net = ipaddress.ip_network(raw_cidr, strict=False)
+
+    if net.version != 4:
+        raise ValueError("IPv6 skipped in this scanner")
+
+    total_scanable_hosts = count_scan_hosts(net)
+
+    if total_scanable_hosts == 0:
+        raise ValueError("no usable host")
+
+    if target_mode == "sample":
+        ip = first_scan_host(net)
+        if ip is None:
+            raise ValueError("no usable host")
+        return net, [str(ip)], total_scanable_hosts, False
+
+    if total_scanable_hosts <= max_cidr_hosts:
+        targets = [str(ip) for ip in iter_scan_hosts(net)]
+        return net, targets, total_scanable_hosts, False
+
+    sampled = reservoir_sample(iter_scan_hosts(net), max_cidr_hosts)
+    sampled_targets = [str(ip) for ip in sampled]
+    return net, sampled_targets, total_scanable_hosts, True
 
 
 def load_targets(file_path: str, max_cidr_hosts: int, target_mode: str):
@@ -97,6 +181,7 @@ def load_targets(file_path: str, max_cidr_hosts: int, target_mode: str):
         "cidr_entries": 0,
         "expanded_from_cidr": 0,
         "sampled_from_cidr": 0,
+        "cidrs_capped_randomly": 0,
         "duplicates_removed": 0,
         "invalid_items": 0,
     }
@@ -112,23 +197,22 @@ def load_targets(file_path: str, max_cidr_hosts: int, target_mode: str):
             try:
                 if "/" in raw:
                     stats["cidr_entries"] += 1
-                    net = ipaddress.ip_network(raw, strict=False)
 
-                    if net.version != 4:
-                        invalid.append(f"{raw} (IPv6 skipped in this scanner)")
+                    try:
+                        normalized_net, cidr_targets, total_scanable_hosts, sampled_down = expand_cidr_targets(
+                            raw_cidr=raw,
+                            target_mode=target_mode,
+                            max_cidr_hosts=max_cidr_hosts,
+                        )
+                    except ValueError as e:
+                        invalid.append(f"{raw} ({e})")
                         continue
 
-                    if net.num_addresses > max_cidr_hosts and target_mode == "all":
-                        invalid.append(f"{raw} (too large for all-host scan: {net.num_addresses} addresses)")
-                        continue
+                    if sampled_down:
+                        stats["cidrs_capped_randomly"] += 1
 
                     if target_mode == "sample":
-                        ip = first_usable_host(net)
-                        if ip is None:
-                            invalid.append(f"{raw} (no usable host)")
-                            continue
-
-                        s = str(ip)
+                        s = cidr_targets[0]
                         if s in seen:
                             stats["duplicates_removed"] += 1
                             continue
@@ -136,14 +220,14 @@ def load_targets(file_path: str, max_cidr_hosts: int, target_mode: str):
                         stats["sampled_from_cidr"] += 1
                         targets.append((s, raw))
                     else:
-                        for ip in net.hosts():
-                            s = str(ip)
+                        for s in cidr_targets:
                             if s in seen:
                                 stats["duplicates_removed"] += 1
                                 continue
                             seen.add(s)
                             stats["expanded_from_cidr"] += 1
                             targets.append((s, raw))
+
                 else:
                     ip = ipaddress.ip_address(raw)
                     if ip.version != 4:
@@ -230,7 +314,10 @@ def main():
     timeout = ask_float("TCP connect timeout in seconds [default=2.0]: ", default=2.0)
     batch_size = ask_positive_int("Batch size [default=256]: ", default=256)
     worker_count = ask_positive_int("Worker count [default=128]: ", default=128)
-    max_cidr_hosts = ask_positive_int("Max hosts per CIDR for all-host mode [default=65536]: ", default=65536)
+    max_cidr_hosts = ask_positive_int(
+        "Max targets to scan per CIDR in all-host mode [default=65536]: ",
+        default=65536,
+    )
     scan_mode = ask_scan_mode()
     target_mode = ask_target_mode()
 
@@ -248,6 +335,9 @@ def main():
         print("No valid IPv4 targets found.")
         if invalid:
             print(f"Invalid/skipped entries: {len(invalid)}")
+            print("Examples of invalid entries:")
+            for item in invalid[:5]:
+                print("  ", item)
         return
 
     if scan_mode == "randomized":
@@ -257,8 +347,9 @@ def main():
     print(f"Invalid/skipped entries: {len(invalid)}")
     print(f"Single IP entries: {stats['single_ips']}")
     print(f"CIDR entries: {stats['cidr_entries']}")
-    print(f"Hosts expanded from CIDR: {stats['expanded_from_cidr']}")
+    print(f"Hosts added from CIDR: {stats['expanded_from_cidr']}")
     print(f"CIDRs sampled once: {stats['sampled_from_cidr']}")
+    print(f"CIDRs randomly capped in all-host mode: {stats['cidrs_capped_randomly']}")
     print(f"Duplicates removed: {stats['duplicates_removed']}")
     print(f"Target mode: {target_mode}")
     print(f"Scan order: {scan_mode}")
@@ -266,6 +357,8 @@ def main():
     print(f"Timeout: {timeout}s")
     print(f"Batch size: {batch_size}")
     print(f"Worker count: {worker_count}")
+    if target_mode == "all":
+        print(f"Max targets per CIDR in all-host mode: {max_cidr_hosts}")
     print("-" * 60)
 
     txt_output = "open_ips.txt"
