@@ -257,6 +257,4 @@ The scanner is built to handle very large and noisy input sets.
 
 ## License
 
-## License
-
 This project is licensed under the GPL-3.0 License
