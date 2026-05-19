@@ -1,97 +1,60 @@
 {
-  "_comment": "CIDR / IPv4 TCP Batch Scanner \u2014 config file. Edit values below, then run scanner_cli.py.",
-  "port": 443,
-  "timeout": 2.0,
-  "batch_size": 100000,
-  "worker_count": 1000,
+  "tls_timeout": 5.0,
+  "tls_worker_count": 1000,
+  "batch_size": 20000,
+  "worker_count": 5000,
   "max_batches": 5,
-  "max_cidr_hosts": 65536,
+  "max_cidr_hosts": 4096,
+  "port": 443,
+  "timeout": 3.0,
+
   "target_mode": "sample",
   "scan_mode": "randomized",
   "cidr_cap_mode": "random",
-  "txt_output": "open_ips.txt",
-  "csv_output": "open_ips.csv",
+
+  "txt_output": "responsive_targets.txt",
+  "csv_output": "responsive_targets.csv",
+
   "target_files": [],
+  "builtin_catalogs": [],
+  "catalogs": {},
+
+  "protocols": ["tcp", "tls"],
+
+  "dns_resolve_limit": 3,
+
+  "tls_server_name_mode": "hostname_or_target",
+
+  "sni_source_mode": "folder",
+  "sni_single": "",
+  "sni_folder": "sni_domains",
+  "sni_files": [],
+
+  "include_builtin_catalogs_by_default": false,
+  "interactive_confirm_summary": true,
+  "show_invalid_items": false,
+
   "predefined_ranges": [
-    {
-      "name": "Akamai",
-      "file": "ranges/akamai_plain_ipv4.txt"
-    },
-    {
-      "name": "AWS",
-      "file": "ranges/aws_plain_ipv4.txt"
-    },
-    {
-      "name": "BuyVM",
-      "file": "ranges/buyvm_plain_ipv4.txt"
-    },
-    {
-      "name": "CDN77",
-      "file": "ranges/cdn77_plain_ipv4.txt"
-    },
-    {
-      "name": "Apple iCloud Private Relay",
-      "file": "ranges/Clean-apple-icloud-private-relay-ip-ranges.txt"
-    },
-    {
-      "name": "GitHub",
-      "file": "ranges/Clean-github-ip-ranges.txt"
-    },
-    {
-      "name": "Google Cloud",
-      "file": "ranges/Clean-google-cloud-ip-ranges.txt"
-    },
-    {
-      "name": "Linode (Akamai Cloud)",
-      "file": "ranges/Clean-linode.txt"
-    },
-    {
-      "name": "Microsoft Azure",
-      "file": "ranges/Clean-microsoft-azure-ip-ranges.txt"
-    },
-    {
-      "name": "Cloudflare",
-      "file": "ranges/cloudflare_plain_ipv4.txt"
-    },
-    {
-      "name": "DigitalOcean",
-      "file": "ranges/digitalocean_plain_ipv4.txt"
-    },
-    {
-      "name": "Fastly",
-      "file": "ranges/fastly_plain_ipv4.txt"
-    },
-    {
-      "name": "Gcore",
-      "file": "ranges/gcore_plain_ipv4.txt"
-    },
-    {
-      "name": "GleSys",
-      "file": "ranges/glesys_plain_ipv4.txt"
-    },
-    {
-      "name": "GTHost",
-      "file": "ranges/gthost_plain_ipv4.txt"
-    },
-    {
-      "name": "Hetzner",
-      "file": "ranges/hetzner_plain_ipv4.txt"
-    },
-    {
-      "name": "Meta",
-      "file": "ranges/meta_plain_ipv4.txt"
-    },
-    {
-      "name": "Oracle",
-      "file": "ranges/oracle_plain_ipv4.txt"
-    },
-    {
-      "name": "Telegram",
-      "file": "ranges/telegram_plain_ipv4.txt"
-    },
-    {
-      "name": "Vercel",
-      "file": "ranges/vercel_plain_ipv4.txt"
-    }
+    { "name": "Akamai", "file": "ranges/akamai_plain_ipv4.txt" },
+    { "name": "AWS", "file": "ranges/aws_plain_ipv4.txt" },
+    { "name": "BuyVM", "file": "ranges/buyvm_plain_ipv4.txt" },
+    { "name": "CDN77", "file": "ranges/cdn77_plain_ipv4.txt" },
+    { "name": "Apple iCloud Private Relay", "file": "ranges/Clean-apple-icloud-private-relay-ip-ranges.txt" },
+    { "name": "GitHub", "file": "ranges/Clean-github-ip-ranges.txt" },
+    { "name": "Google Cloud", "file": "ranges/Clean-google-cloud-ip-ranges.txt" },
+    { "name": "Linode (Akamai Cloud)", "file": "ranges/Clean-linode.txt" },
+    { "name": "Microsoft Azure", "file": "ranges/Clean-microsoft-azure-ip-ranges.txt" },
+    { "name": "Cloudflare", "file": "ranges/cloudflare_plain_ipv4.txt" },
+    { "name": "DigitalOcean", "file": "ranges/digitalocean_plain_ipv4.txt" },
+    { "name": "Fastly", "file": "ranges/fastly_plain_ipv4.txt" },
+    { "name": "Gcore", "file": "ranges/gcore_plain_ipv4.txt" },
+    { "name": "GleSys", "file": "ranges/glesys_plain_ipv4.txt" },
+    { "name": "GTHost", "file": "ranges/gthost_plain_ipv4.txt" },
+    { "name": "Hetzner", "file": "ranges/hetzner_plain_ipv4.txt" },
+    { "name": "Meta", "file": "ranges/meta_plain_ipv4.txt" },
+    { "name": "Oracle", "file": "ranges/oracle_plain_ipv4.txt" },
+    { "name": "Telegram", "file": "ranges/telegram_plain_ipv4.txt" },
+    { "name": "custom", "file": "ranges/custom.txt" },
+    { "name": "Vercel", "file": "ranges/vercel_plain_ipv4.txt" }
   ]
 }
