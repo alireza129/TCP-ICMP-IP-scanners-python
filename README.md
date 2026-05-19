@@ -177,8 +177,8 @@ The script resolves relative paths with respect to the `config.json` directory a
 2. Clone the repository:
 
    ```bash
-   git clone https://github.com/<your-user>/<your-repo>.git
-   cd <your-repo>
+   git clone https://github.com/alireza129/TCP-ICMP-CIDR-IP-scanners-python.git
+   cd TCP-ICMP-CIDR-IP-scanners-python
    ```
 
 3. Create or edit `config.json` next to the script (optional; see above).
